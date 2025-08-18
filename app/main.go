@@ -16,13 +16,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
+	defer func() {
+		_ = l.Close()
+	}()
 
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+
+		go handleClient(conn)
+	}
+}
+
+func handleClient(conn net.Conn) {
 	buffer := make([]byte, 1024)
+
 	for {
 		_, err := conn.Read(buffer)
 		if err != nil {
@@ -31,7 +42,7 @@ func main() {
 				if err != nil {
 					fmt.Println("failed to close connection: %w", err)
 				}
-				break
+				return
 			}
 			fmt.Println("failed to read: %w", err)
 
@@ -39,7 +50,7 @@ func main() {
 			if err != nil {
 				fmt.Println("failed to close connection: %w", err)
 			}
-			break
+			return
 		}
 
 		_, _ = conn.Write([]byte("+PONG\r\n"))
