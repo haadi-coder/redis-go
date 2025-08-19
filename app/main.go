@@ -40,9 +40,12 @@ func run() error {
 			return fmt.Errorf("failed to accept connection: %w", err)
 		}
 
-		err = handleConn(conn)
+		go func() {
+			err = handleConn(conn)
+		}()
+
 		if err != nil {
-			fmt.Print(err)
+			return fmt.Errorf("failed to handle connection: %w", err)
 		}
 	}
 }
