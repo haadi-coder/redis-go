@@ -33,7 +33,6 @@ func main() {
 
 func handleClient(conn net.Conn) {
 	buffer := make([]byte, 1024)
-
 	for {
 		_, err := conn.Read(buffer)
 		if err != nil {
