@@ -45,12 +45,10 @@ func run() error {
 		}
 
 		go func() {
-			err = handleConn(conn, cache)
+			if err := handleConn(conn, cache); err != nil {
+				fmt.Printf("Error handling connection: %v\n", err)
+			}
 		}()
-
-		if err != nil {
-			return fmt.Errorf("failed to handle connection: %w", err)
-		}
 	}
 }
 
