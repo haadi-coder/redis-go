@@ -6,7 +6,9 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -25,6 +27,8 @@ func main() {
 }
 
 func run() error {
+	cache := newCache()
+
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		return fmt.Errorf("failed to bind to port 6379: %w", err)
@@ -41,7 +45,7 @@ func run() error {
 		}
 
 		go func() {
-			err = handleConn(conn)
+			err = handleConn(conn, cache)
 		}()
 
 		if err != nil {
@@ -50,7 +54,7 @@ func run() error {
 	}
 }
 
-func handleConn(conn net.Conn) error {
+func handleConn(conn net.Conn, cache *cache) error {
 	defer func() {
 		_ = conn.Close()
 	}()
@@ -76,19 +80,23 @@ func handleConn(conn net.Conn) error {
 			if len(resp.Value) < 2 {
 				_, _ = conn.Write([]byte("$-1\r\n"))
 			} else {
-				resp := fmt.Sprintf("$%d\r\n%s\r\n", len(resp.Value[1]), resp.Value[1])
-				_, _ = conn.Write([]byte(resp))
+				_, _ = conn.Write(toBulk(resp.Value[1]))
 			}
 		case "GET":
-			value, found := redisCache.get(resp.Value[1])
+			value, found := cache.get(resp.Value[1])
 			if !found {
 				_, _ = conn.Write([]byte("$-1\r\n"))
 			} else {
 				_, _ = conn.Write(toBulk(value))
 			}
-
 		case "SET":
-			redisCache.set(resp.Value[1], resp.Value[2])
+			var ttl time.Duration
+			if strings.ToUpper(resp.Value[3]) == "PX" {
+				wait, _ := strconv.Atoi(resp.Value[4])
+				ttl = time.Duration(wait) * time.Millisecond
+			}
+
+			cache.set(resp.Value[1], resp.Value[2], ttl)
 			_, _ = conn.Write([]byte("+OK\r\n"))
 
 		default:
@@ -116,9 +124,9 @@ func parseResp(reader *bufio.Reader) (*Resp, error) {
 
 	switch trimmed[0] {
 	case Array:
-		return parseRespArray(trimmed, reader)
+		return fromArray(trimmed, reader)
 	case Bulk:
-		return parseBulk(trimmed, reader)
+		return fromBulk(trimmed, reader)
 	case Simple:
 		return &Resp{
 			Type:  "simple",
@@ -129,7 +137,7 @@ func parseResp(reader *bufio.Reader) (*Resp, error) {
 	}
 }
 
-func parseRespArray(line string, reader *bufio.Reader) (*Resp, error) {
+func fromArray(line string, reader *bufio.Reader) (*Resp, error) {
 	var count int
 	_, err := fmt.Sscanf(line, "*%d\r\n", &count)
 	if err != nil {
@@ -169,7 +177,7 @@ func parseRespArray(line string, reader *bufio.Reader) (*Resp, error) {
 	}, nil
 }
 
-func parseBulk(line string, reader *bufio.Reader) (*Resp, error) {
+func fromBulk(line string, reader *bufio.Reader) (*Resp, error) {
 	var length int
 	_, err := fmt.Sscanf(line, "$%d", &length)
 	if err != nil {
