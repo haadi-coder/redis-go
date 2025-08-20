@@ -42,7 +42,7 @@ func (c *cache) get(key string) (string, bool) {
 	defer c.mu.RUnlock()
 	item, found := c.data[key]
 
-	if item.isExpired() {
+	if !item.expiry.IsZero() && item.isExpired() {
 		delete(c.data, key)
 		return item.value, false
 	}
@@ -58,7 +58,7 @@ func (c *cache) set(key string, value string, ttl time.Duration) {
 	if ttl > 0 {
 		expiry = time.Now().Add(ttl)
 	}
-
+	
 	c.data[key] = item{
 		value:  value,
 		expiry: expiry,
