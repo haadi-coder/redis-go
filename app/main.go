@@ -51,12 +51,15 @@ func run() error {
 }
 
 func handleConn(conn net.Conn) error {
+	defer func() {
+		_ = conn.Close()
+	}()
+
 	reader := bufio.NewReader(conn)
 
 	for {
 		resp, err := parseResp(reader)
 		if err != nil {
-			_ = conn.Close()
 			return fmt.Errorf("failed to parse RESP: %w", err)
 		}
 
@@ -76,6 +79,20 @@ func handleConn(conn net.Conn) error {
 				resp := fmt.Sprintf("$%d\r\n%s\r\n", len(resp.Value[1]), resp.Value[1])
 				_, _ = conn.Write([]byte(resp))
 			}
+		case "GET":
+			value, found := redisCache.get(resp.Value[1])
+			if !found {
+				_, _ = conn.Write([]byte("$-1\r\n"))
+			} else {
+				_, _ = conn.Write(toBulk(value))
+			}
+
+		case "SET":
+			redisCache.set(resp.Value[1], resp.Value[2])
+			_, _ = conn.Write([]byte("+OK\r\n"))
+
+		default:
+			return fmt.Errorf("unknown command: %s", command)
 		}
 	}
 }
@@ -100,6 +117,8 @@ func parseResp(reader *bufio.Reader) (*Resp, error) {
 	switch trimmed[0] {
 	case Array:
 		return parseRespArray(trimmed, reader)
+	case Bulk:
+		return parseBulk(trimmed, reader)
 	case Simple:
 		return &Resp{
 			Type:  "simple",
@@ -148,4 +167,35 @@ func parseRespArray(line string, reader *bufio.Reader) (*Resp, error) {
 		Type:  "array",
 		Value: parts,
 	}, nil
+}
+
+func parseBulk(line string, reader *bufio.Reader) (*Resp, error) {
+	var length int
+	_, err := fmt.Sscanf(line, "$%d", &length)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan bulk size: %w", err)
+	}
+
+	value := make([]byte, length)
+	_, err = io.ReadFull(reader, value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read bulk data: %w", err)
+	}
+
+	_, err = reader.ReadString('\n')
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CRLF after bulk: %w", err)
+	}
+
+	return &Resp{
+		Type:  "bulk",
+		Value: []string{string(value)},
+	}, nil
+}
+
+func toBulk(str string) []byte {
+	bytes := len(str)
+	bulk := fmt.Sprintf("$%d\r\n%s\r\n", bytes, str)
+
+	return []byte(bulk)
 }
