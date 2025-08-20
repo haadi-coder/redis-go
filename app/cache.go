@@ -44,6 +44,7 @@ func (c *cache) get(key string) (string, bool) {
 
 	if item.isExpired() {
 		delete(c.data, key)
+		return item.value, false
 	}
 
 	return item.value, found
