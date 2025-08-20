@@ -95,7 +95,6 @@ func handleConn(conn net.Conn, cache *cache) error {
 				if strings.ToUpper(resp.Value[3]) == "PX" {
 					wait, _ := strconv.Atoi(resp.Value[4])
 					ttl = time.Duration(wait) * time.Millisecond
-
 				}
 			}
 
