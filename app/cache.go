@@ -16,35 +16,22 @@ type item struct {
 }
 
 func newCache() *cache {
-	c := &cache{
+	return &cache{
 		data: make(map[string]item),
 	}
-
-	go func() {
-		for range time.Tick(2 * time.Second) {
-			c.mu.Lock()
-
-			for key, item := range c.data {
-				if item.isExpired() {
-					delete(c.data, key)
-				}
-			}
-
-			c.mu.Unlock()
-		}
-	}()
-
-	return c
 }
 
 func (c *cache) get(key string) (string, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
 	item, found := c.data[key]
+	c.mu.RUnlock()
 
-	if item.isExpired() {
+	if found && item.isExpired() {
+		c.mu.Lock()
 		delete(c.data, key)
-		return item.value, false
+		c.mu.Unlock()
+
+		return "", false
 	}
 
 	return item.value, found
