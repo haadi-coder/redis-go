@@ -54,8 +54,8 @@ func (c *cache) set(key string, value string, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var expiry time.Time
-	if ttl != 0 {
+	expiry := time.Time{}
+	if ttl > 0 {
 		expiry = time.Now().Add(ttl)
 	}
 

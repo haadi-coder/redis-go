@@ -91,9 +91,11 @@ func handleConn(conn net.Conn, cache *cache) error {
 			}
 		case "SET":
 			var ttl time.Duration
-			if strings.ToUpper(resp.Value[3]) == "PX" {
-				wait, _ := strconv.Atoi(resp.Value[4])
-				ttl = time.Duration(wait) * time.Millisecond
+			if len(resp.Value) > 3 {
+				if strings.ToUpper(resp.Value[3]) == "PX" {
+					wait, _ := strconv.Atoi(resp.Value[4])
+					ttl = time.Duration(wait) * time.Millisecond
+				}
 			}
 
 			cache.set(resp.Value[1], resp.Value[2], ttl)
